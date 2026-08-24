@@ -12,6 +12,34 @@
 
 static Preferences prefs;
 static const char* NS = "planeradar";
+static SettingsStorageBeginCallback s_storageBegin = nullptr;
+static SettingsStorageEndCallback s_storageEnd = nullptr;
+
+void Settings_SetStorageCallbacks(SettingsStorageBeginCallback beginCallback,
+                                  SettingsStorageEndCallback endCallback) {
+  if ((beginCallback == nullptr) != (endCallback == nullptr)) {
+    Serial.println("Nastaveni: storage guard vyzaduje oba callbacky");
+    s_storageBegin = nullptr;
+    s_storageEnd = nullptr;
+    return;
+  }
+  s_storageBegin = beginCallback;
+  s_storageEnd = endCallback;
+}
+
+static bool beginPreferencesWrite() {
+  if (s_storageBegin != nullptr && !s_storageBegin()) return false;
+  if (prefs.begin(NS, false)) return true;
+  if (s_storageEnd != nullptr) s_storageEnd();
+  return false;
+}
+
+static void endPreferencesWrite() {
+  prefs.end();
+  if (s_storageEnd != nullptr && !s_storageEnd()) {
+    Serial.println("Nastaveni: host storage guard se nepodarilo ukoncit");
+  }
+}
 
 // --- WiFi ---
 static char s_ssid[33] = "";
@@ -69,16 +97,16 @@ static void markDirty() { s_uiDirty = true; s_uiDirtyAt = millis(); }
 // Immediate write for the settings that are changed rarely and deliberately
 // (web UI, portal) rather than by dragging a finger.
 static void putU8(const char* k, uint8_t v) {
-  if (prefs.begin(NS, false)) { prefs.putUChar(k, v); prefs.end(); }
+  if (beginPreferencesWrite()) { prefs.putUChar(k, v); endPreferencesWrite(); }
 }
 static void putU16(const char* k, uint16_t v) {
-  if (prefs.begin(NS, false)) { prefs.putUShort(k, v); prefs.end(); }
+  if (beginPreferencesWrite()) { prefs.putUShort(k, v); endPreferencesWrite(); }
 }
 static void putBool(const char* k, bool v) {
-  if (prefs.begin(NS, false)) { prefs.putBool(k, v); prefs.end(); }
+  if (beginPreferencesWrite()) { prefs.putBool(k, v); endPreferencesWrite(); }
 }
 static void putStr(const char* k, const char* v) {
-  if (prefs.begin(NS, false)) { prefs.putString(k, v); prefs.end(); }
+  if (beginPreferencesWrite()) { prefs.putString(k, v); endPreferencesWrite(); }
 }
 
 void Settings_Begin() {
@@ -124,10 +152,10 @@ void Settings_Begin() {
   }
   if (s_altMax == 0) s_altMax = 60000;
   if (s_autoRot > 3600) s_autoRot = 3600;
-  if (migrateRotate && prefs.begin(NS, false)) {
+  if (migrateRotate && beginPreferencesWrite()) {
     prefs.putUShort("autoRS", s_autoRot);
     prefs.remove("autoR");           // the old key would only confuse later
-    prefs.end();
+    endPreferencesWrite();
     if (s_autoRot) Serial.printf("Nastaveni: stridani prevedeno na %u s\n", s_autoRot);
   }
   Lang_Set(s_lang);
@@ -143,10 +171,10 @@ void Settings_SetWifi(const char* ssid, const char* pass) {
   if (!pass) pass = "";
   strncpy(s_ssid,  ssid, sizeof(s_ssid) - 1);   s_ssid[sizeof(s_ssid) - 1] = '\0';
   strncpy(s_wpass, pass, sizeof(s_wpass) - 1);  s_wpass[sizeof(s_wpass) - 1] = '\0';
-  if (prefs.begin(NS, false)) {
+  if (beginPreferencesWrite()) {
     prefs.putString("ssid", s_ssid);
     prefs.putString("wpass", s_wpass);
-    prefs.end();
+    endPreferencesWrite();
   }
 }
 
@@ -159,11 +187,11 @@ bool   Settings_HasLocation() { return s_hasLoc; }
 
 void Settings_SetLocation(double lat, double lon) {
   s_lat = lat; s_lon = lon; s_hasLoc = true;
-  if (prefs.begin(NS, false)) {
+  if (beginPreferencesWrite()) {
     prefs.putDouble("lat", lat);
     prefs.putDouble("lon", lon);
     prefs.putBool("hasLoc", true);
-    prefs.end();
+    endPreferencesWrite();
   }
 }
 
@@ -189,7 +217,7 @@ void   Settings_SetNightOffsetMin(int8_t m) {
   if (m >  NIGHT_OFFSET_MIN_LIMIT) m =  NIGHT_OFFSET_MIN_LIMIT;
   if (m < -NIGHT_OFFSET_MIN_LIMIT) m = -NIGHT_OFFSET_MIN_LIMIT;
   s_nightOff = m;
-  if (prefs.begin(NS, false)) { prefs.putChar("nOff", m); prefs.end(); }
+  if (beginPreferencesWrite()) { prefs.putChar("nOff", m); endPreferencesWrite(); }
 }
 bool Settings_IsNight() { return s_isNight; }
 void Settings_SetNight(bool night) { s_isNight = night; }
@@ -256,8 +284,9 @@ uint16_t Settings_AltMaxFt() { return s_altMax; }
 void     Settings_SetAltRangeFt(uint16_t lo, uint16_t hi) {
   if (hi <= lo) { lo = 0; hi = 60000; }           // nonsense range = no filter
   s_altMin = lo; s_altMax = hi;
-  if (prefs.begin(NS, false)) {
-    prefs.putUShort("altLo", lo); prefs.putUShort("altHi", hi); prefs.end();
+  if (beginPreferencesWrite()) {
+    prefs.putUShort("altLo", lo); prefs.putUShort("altHi", hi);
+    endPreferencesWrite();
   }
 }
 bool Settings_OnlyWithCallsign() { return s_onlyCs; }
@@ -406,20 +435,20 @@ bool Settings_FromJson(JsonObjectConst in) {
 void Settings_Tick() {
   if (!s_uiDirty) return;
   if (millis() - s_uiDirtyAt < 2000) return;
-  if (prefs.begin(NS, false)) {
+  if (beginPreferencesWrite()) {
     prefs.putUChar("rngP", s_rngP);
     prefs.putUChar("rngM", s_rngM);
     prefs.putUChar("scr",  s_scr);
     prefs.putUShort("topb", s_top);
     prefs.putUChar("bl",   s_briDay);
     prefs.putUChar("blN",  s_briNight);
-    prefs.end();
+    endPreferencesWrite();
+    s_uiDirty = false;
   }
-  s_uiDirty = false;
 }
 
 void Settings_ClearAll() {
-  if (prefs.begin(NS, false)) { prefs.clear(); prefs.end(); }
+  if (beginPreferencesWrite()) { prefs.clear(); endPreferencesWrite(); }
   s_lat = DEFAULT_LAT; s_lon = DEFAULT_LON; s_hasLoc = false;
   s_briDay = 80; s_briNight = 25; s_nightAuto = true; s_nightOff = 0; s_isNight = false;
   s_metric = false; s_lang = LANG_CZ; Lang_Set(s_lang);

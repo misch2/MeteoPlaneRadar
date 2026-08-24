@@ -18,6 +18,15 @@
 #include <ArduinoJson.h>
 #include "Config.h"   // DEFAULT_LAT / DEFAULT_LON, SCREEN_*
 
+using SettingsStorageBeginCallback = bool (*)();
+using SettingsStorageEndCallback = bool (*)();
+
+// Optional host-owned guard around every NVS write. Standalone firmware leaves
+// these null. An integration host can stop a cache-sensitive display pipeline
+// before Preferences writes and recreate it afterwards.
+void Settings_SetStorageCallbacks(SettingsStorageBeginCallback beginCallback,
+                                  SettingsStorageEndCallback endCallback);
+
 void   Settings_Begin();
 
 // --- WiFi credentials -------------------------------------------------------
