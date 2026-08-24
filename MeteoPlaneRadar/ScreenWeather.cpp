@@ -30,6 +30,7 @@
 
 #include <WiFi.h>
 #include <PNGdec.h>
+#include "RadarPngDecoder.h"
 #include <math.h>
 #include <string.h>
 #include <esp_heap_caps.h>
@@ -47,7 +48,7 @@ static const int   RANGE_COUNT = sizeof(RANGES_KM) / sizeof(RANGES_KM[0]);
 static int s_rangeIdx = 1;
 static float currentRange() { return RANGES_KM[s_rangeIdx]; }
 
-static PNG png;
+static PNG& png = RadarPngDecoder();
 static int s_imgW = 600, s_imgH = 480;
 static int s_dataX1 = 100000, s_dataY0 = -1;   // data bounds (outside = title/scale in PNG)
 static String s_status = "Start...";
@@ -170,10 +171,10 @@ static void borderProject(float lat, float lon, int* sx, int* sy) {
   *sy = (int)((int64_t)(srcY - s_crop.y1) * LCD_HEIGHT / cropH());
 }
 
-static int pngDraw(PNGDRAW* d) {
+static void pngDraw(PNGDRAW* d) {
   int srcY = d->y;
-  if (srcY < s_crop.y1 || srcY > s_crop.y2) return 1;
-  if (!s_crop565 || !s_lineBuf) return 1;
+  if (srcY < s_crop.y1 || srcY > s_crop.y2) return;
+  if (!s_crop565 || !s_lineBuf) return;
   png.getLineAsRGB565(d, s_lineBuf, PNG_RGB565_LITTLE_ENDIAN, 0xffffffff);
   const int cw = cropW();
   uint16_t* row = s_crop565 + (int64_t)(srcY - s_crop.y1) * cw;
@@ -184,7 +185,6 @@ static int pngDraw(PNGDRAW* d) {
     bool have = (srcX >= 0 && srcX < s_imgW && srcX <= s_dataX1 && srcY >= s_dataY0);
     row[i] = have ? s_lineBuf[srcX] : 0x0000;
   }
-  return 1;
 }
 
 // RainViewer frames are already in display coordinates - the zoom was chosen so
@@ -443,6 +443,14 @@ void ScreenWeather_Enter() {
   s_lastStep = millis();
   s_gap = false;
   s_curFrame = 0;
+}
+
+void ScreenWeather_Leave() {
+  // RainViewer keeps one TLS connection open across its incremental tile
+  // burst. A combined host may run a different module's network worker while
+  // this screen is hidden, so release the connection without discarding the
+  // already completed frames or the incremental state.
+  RainViewer_Suspend();
 }
 
 void ScreenWeather_ChangeRange(int dir) {

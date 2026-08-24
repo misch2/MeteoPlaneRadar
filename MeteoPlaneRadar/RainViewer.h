@@ -42,6 +42,10 @@ void RainViewer_Begin(double lat, double lon, float radiusKm, int wantFrames);
 // once and then drift, a hundredth of a kilometre at a time.
 void RainViewer_Refresh();
 
+// Close the reusable TLS connection while preserving downloaded frames and
+// incremental state. The next Step() resumes with a fresh session.
+void RainViewer_Suspend();
+
 // Do a little work: at most one HTTP request. Returns true when something
 // changed on screen. Call from the weather screen's tick.
 bool RainViewer_Step();

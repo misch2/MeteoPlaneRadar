@@ -140,14 +140,18 @@ void Settings_Begin() {
     s_altMax = prefs.getUShort("altHi", 60000);
     s_onlyCs = prefs.getBool("onlyCs", false);
     s_sqAlert = prefs.getBool("sqAl", true);
-    prefs.getString("watch", s_watch, sizeof(s_watch));
+    if (prefs.isKey("watch")) {
+      prefs.getString("watch", s_watch, sizeof(s_watch));
+    }
     s_rngP   = prefs.getUChar("rngP", 1);
     s_rngM   = prefs.getUChar("rngM", 1);
     s_scr    = prefs.getUChar("scr", SCREEN_PLANES_I);
     s_top    = prefs.getUShort("topb", 0);
-    prefs.getString("pw", s_pw, sizeof(s_pw));
-    prefs.getString("ssid", s_ssid, sizeof(s_ssid));
-    prefs.getString("wpass", s_wpass, sizeof(s_wpass));
+    if (prefs.isKey("pw")) prefs.getString("pw", s_pw, sizeof(s_pw));
+    if (prefs.isKey("ssid")) prefs.getString("ssid", s_ssid, sizeof(s_ssid));
+    if (prefs.isKey("wpass")) {
+      prefs.getString("wpass", s_wpass, sizeof(s_wpass));
+    }
     prefs.end();
   }
   if (s_altMax == 0) s_altMax = 60000;

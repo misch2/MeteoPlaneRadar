@@ -14,6 +14,9 @@
 #include <Arduino.h>
 
 void ScreenWeather_Enter();
+// Release transient resources when the host switches to another screen. The
+// decoded frames remain cached and are reused on the next Enter().
+void ScreenWeather_Leave();
 bool ScreenWeather_Tick();          // downloads/animates; true = needs redraw
 void ScreenWeather_Draw();
 void ScreenWeather_ChangeRange(int dir);   // swipe: change the range

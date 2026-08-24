@@ -11,6 +11,7 @@
 #include "TimeUtil.h"
 #include <ArduinoJson.h>
 #include <PNGdec.h>
+#include "RadarPngDecoder.h"
 #include <esp_heap_caps.h>
 #include <math.h>
 #include <string.h>
@@ -64,7 +65,7 @@ static int s_tx0, s_ty0, s_txN, s_tyN;
 // One tile's PNG, reused for every download.
 static uint8_t* s_png = nullptr;
 static size_t   s_pngLen = 0;
-static PNG      s_decoder;
+static PNG&     s_decoder = RadarPngDecoder();
 static uint16_t* s_lineBuf = nullptr;
 
 // Where the tile being decoded lands on the display.
@@ -182,16 +183,16 @@ static bool ensureBuffers(int frames) {
 // Nearest neighbour on purpose - the tiles are already smoothed server-side
 // (RV_SMOOTH), and interpolating radar reflectivity would invent intensities
 // that the data does not contain.
-static int rvPngDraw(PNGDRAW* d) {
-  if (!s_dstFrame || !s_lineBuf) return 0;
+static void rvPngDraw(PNGDRAW* d) {
+  if (!s_dstFrame || !s_lineBuf) return;
   // The line buffer is sized for the tile size we asked for. If the server ever
   // answered with something wider, decoding into it would run off the end of
   // the allocation - refuse instead of corrupting memory.
-  if (d->iWidth > RV_TILE_SIZE) return 0;
+  if (d->iWidth > RV_TILE_SIZE) return;
 
   const int S = s_scale;
   const int dyTop = s_dstY + d->y * S;
-  if (dyTop + S <= 0 || dyTop >= LCD_HEIGHT) return 1;   // whole row off-screen
+  if (dyTop + S <= 0 || dyTop >= LCD_HEIGHT) return;   // whole row off-screen
 
   // Transparent pixels (no radar coverage) blend to black, which is what the
   // rest of the screen is - so "no data" and "no rain" look the same, exactly
@@ -204,14 +205,14 @@ static int rvPngDraw(PNGDRAW* d) {
   if (s_dstX < 0) sx0 = (-s_dstX + S - 1) / S;
   const int maxSx = (LCD_WIDTH - 1 - s_dstX) / S;
   if (maxSx < sx1) sx1 = maxSx;
-  if (sx0 > sx1) return 1;
+  if (sx0 > sx1) return;
 
   if (S == 1) {
     const int dy = dyTop;
-    if (dy < 0 || dy >= LCD_HEIGHT) return 1;
+    if (dy < 0 || dy >= LCD_HEIGHT) return;
     memcpy(s_dstFrame + (int32_t)dy * LCD_WIDTH + (s_dstX + sx0),
            s_lineBuf + sx0, (size_t)(sx1 - sx0 + 1) * sizeof(uint16_t));
-    return 1;
+    return;
   }
 
   for (int r = 0; r < S; r++) {
@@ -227,7 +228,6 @@ static int rvPngDraw(PNGDRAW* d) {
       }
     }
   }
-  return 1;
 }
 
 // --- Index ------------------------------------------------------------------
@@ -394,6 +394,10 @@ void RainViewer_Refresh() {
   s_state = RV_NEED_INDEX;
 }
 
+void RainViewer_Suspend() {
+  Net_SessionEnd();
+}
+
 bool RainViewer_Step() {
   switch (s_state) {
     case RV_IDLE:
@@ -416,6 +420,9 @@ bool RainViewer_Step() {
       return false;
 
     case RV_TILES: {
+      // Suspend() may have closed the reusable connection while another host
+      // screen was active. SessionBegin is idempotent and cheaply resumes it.
+      Net_SessionBegin();
       if (s_buildPos >= s_frameN) { s_state = RV_DONE; return false; }
       const int f = s_buildOrder[s_buildPos];
       const int tiles = s_txN * s_tyN;

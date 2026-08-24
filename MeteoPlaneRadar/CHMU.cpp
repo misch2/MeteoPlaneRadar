@@ -78,7 +78,12 @@ static bool downloadNameTo(const String& name, uint8_t* buf, size_t cap, size_t*
   WiFiClientSecure client; client.setInsecure();
   HTTPClient http; http.setTimeout(15000);
   if (!http.begin(client, url)) return false;
-  if (http.GET() != HTTP_CODE_OK) { http.end(); return false; }
+  const int status = http.GET();
+  if (status != HTTP_CODE_OK) {
+    Serial.printf("CHMU: HTTP %d pri stahovani %s\n", status, name);
+    http.end();
+    return false;
+  }
   int total = http.getSize();
   if (total > (int)cap) { http.end(); return false; }
   WiFiClient* stream = http.getStreamPtr();
@@ -130,7 +135,12 @@ bool CHMU_FetchLatest() {
   WiFiClientSecure client; client.setInsecure();
   HTTPClient http; http.setTimeout(15000);
   if (!http.begin(client, CHMU_INDEX_URL)) return s_hasSnapshot;
-  if (http.GET() != HTTP_CODE_OK) { http.end(); return s_hasSnapshot; }
+  const int status = http.GET();
+  if (status != HTTP_CODE_OK) {
+    Serial.printf("CHMU: index HTTP %d\n", status);
+    http.end();
+    return s_hasSnapshot;
+  }
   WiFiClient* stream = http.getStreamPtr();
   String window, newestTs, latest; uint8_t buf[512]; unsigned long last = millis();
   while (http.connected()) {
@@ -220,7 +230,11 @@ int CHMU_FetchAnim(int wantN) {
   if (!http.begin(client, CHMU_INDEX_URL)) return s_animCount;
   int code = http.GET();
   if (http.hasHeader("Date")) Outside_NoteHttpDate(http.header("Date").c_str());
-  if (code != HTTP_CODE_OK) { http.end(); return s_animCount; }
+  if (code != HTTP_CODE_OK) {
+    Serial.printf("CHMU: animacni index HTTP %d\n", code);
+    http.end();
+    return s_animCount;
+  }
   WiFiClient* stream = http.getStreamPtr();
   String window; uint8_t buf[512]; unsigned long last = millis();
   while (http.connected()) {
