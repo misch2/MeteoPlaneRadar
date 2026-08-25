@@ -1,6 +1,6 @@
 # Toto je jen fork
 
-Skutečný repozitář je zde: [https://github.com/CooLajz/waveshare-hodiny](https://github.com/petus/MeteoPlaneRadar)
+Skutečný repozitář je zde: [https://github.com/petus/MeteoPlaneRadar](https://github.com/petus/MeteoPlaneRadar)
 
 Tento fork slouží jen k tomu abych mohl https://github.com/petus/MeteoPlaneRadar  snadno integrovat dohromady s dalšími moduly.
 
